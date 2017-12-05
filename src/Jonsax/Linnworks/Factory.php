@@ -14,13 +14,15 @@ class Factory
     var $dev = false;
     var $debug = false;
     
-    var $timeout = 30;
+    var $timeout = 60;
     
     private $headers;
     
     private $server = "https://eu1.linnworks.net/";
     
     private $auth_url = "https://api.linnworks.net/";
+    
+    
     private $client;
     private $token;
     private $lui;
@@ -64,7 +66,8 @@ class Factory
         $client = new \GuzzleHttp\Client([
                 'base_uri' => $this->server,
                 'timeout'  => $this->timeout,
-                'debug' => $this->debug
+                'debug' => $this->debug,
+                'http_errors' => false
         ]);
      
         
@@ -72,8 +75,8 @@ class Factory
                 'applicationId'=> $this->application_id,
                 'applicationSecret'=> $this->application_secret,
                 'token' => $this->secret
-        
         ));
+        
         
         // get auth token
         $response = $client->request('POST', $this->auth_url . "api/Auth/AuthorizeByApplication", [
@@ -82,8 +85,30 @@ class Factory
         ]
                 );
         
-
+        
+        $statuscode = $response->getStatusCode();
+        
         $body = json_decode($response->getBody());
+
+        if ($statuscode!=200) {
+            
+            if (isset($body->Message)) {
+
+                $error = 'Problem connecting to linnworks server: ' . $body->Message . " (" . $statuscode . ")";
+                
+            } else {
+                
+                $error = 'Problem connecting to linnworks server: (' . $statuscode . ")";
+                
+            }
+            
+            throw new \Exception($error);
+
+        }
+        
+        if (isset($body->Server)) {
+            $this->server = $body->Server."/";
+        }
         
         $this->authorization = $body->Token;
         $this->lui = $body->UserId;
@@ -98,7 +123,9 @@ class Factory
             $this->client = new \GuzzleHttp\Client([
                     'base_uri' => $this->server,
                     'timeout'  => $this->timeout,
-                    'debug' => $this->debug
+                    'debug' => $this->debug,
+                    'http_errors' => false
+                
             ]);
     
             if (!$this->authorization) {
@@ -119,16 +146,31 @@ class Factory
     public function sendPost ($endpoint, $data)
     {
     
-        $this->server = "https://eu1.linnworks.net/api/";
-        
-        
         $response = $this->getClient()->request('POST', $this->server.$endpoint, [
                 'headers'=>$this->headers,
                 'query'=>$data
-        ]
-                );
+                ]
+        );
     
-    
+        $statuscode = $response->getStatusCode();
+        
+        if ($statuscode!=200 && $statuscode!=404) {
+            
+            if (isset($body->Message)) {
+                
+                $error = 'Problem connecting to linnworks server: ' . $body->Message . " (" . $statuscode . ")";
+                
+            } else {
+                
+                $error = 'Problem connecting to linnworks server: (' . $statuscode . ")";
+                
+            }
+            
+            throw new \Exception($error);
+            
+        }
+        
+        
         $this->raw_result = $response->getBody();
         $this->result = json_decode($this->raw_result);
     
@@ -139,21 +181,22 @@ class Factory
     
     public function getOrder ($endpoint, $data)
     {
-
+        
         $response = $this->getClient()->request('POST', $this->server."Orders/GetOrder", [
-                'headers'=>$headers,
-                'query'=>$data
+            'headers'=>$headers,
+            'query'=>$data
         ]
-                );
-    
-    
+            );
+        
+        
         $order = json_decode($response->getBody());
-    
-    
+        
+        
         return $order;
-    
-    
+        
+        
     }
+    
     
     
     
