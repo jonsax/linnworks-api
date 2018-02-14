@@ -12,7 +12,7 @@ class Factory
     private $application_secret;
     private $secret;
     var $dev = false;
-    var $debug = false;
+    var $debug = 0;
     
     var $timeout = 60;
     
@@ -38,7 +38,7 @@ class Factory
         $this->secret = $config->secret;
         
         $this->timeout = (isset($config->timeout)?$config->timeout:$this->timeout);
-    
+
         $this->dev = (isset($config->dev)?$config->dev:$this->dev);
         $this->debug = (isset($config->debug )?$config->debug :$this->debug );
     
@@ -66,7 +66,7 @@ class Factory
         $client = new \GuzzleHttp\Client([
                 'base_uri' => $this->server,
                 'timeout'  => $this->timeout,
-                'debug' => $this->debug,
+                'debug' =>   $this->debug,
                 'http_errors' => false
         ]);
      
@@ -84,7 +84,6 @@ class Factory
                 'query'=>$data
         ]
                 );
-        
         
         $statuscode = $response->getStatusCode();
         
@@ -123,7 +122,7 @@ class Factory
             $this->client = new \GuzzleHttp\Client([
                     'base_uri' => $this->server,
                     'timeout'  => $this->timeout,
-                    'debug' => $this->debug,
+                     'debug' => $this->debug,
                     'http_errors' => false
                 
             ]);
@@ -143,13 +142,22 @@ class Factory
     }
     
     
-    public function sendPost ($endpoint, $data)
+    public function sendPost ($endpoint, $data,$body=false)
     {
     
-        $response = $this->getClient()->request('POST', $this->server.$endpoint, [
-                'headers'=>$this->headers,
-                'query'=>$data
-                ]
+        
+        $request = [
+            'headers'=>$this->headers,
+            'debug' => $this->debug,
+            'query'=>$data
+        ];
+        
+        if ($body) {
+            
+            $request['body'] = $body;
+        }
+        
+        $response = $this->getClient()->request('POST', $this->server.$endpoint, $request 
         );
     
         $statuscode = $response->getStatusCode();
