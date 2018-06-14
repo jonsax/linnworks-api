@@ -16,15 +16,17 @@ class Factory
     private $application_secret;
     private $secret;
     var $dev = false;
-    var $debug = false;
+    var $debug = 0;
     
-    var $timeout = 30;
+    var $timeout = 60;
     
     private $headers;
     
     private $server = "https://eu1.linnworks.net/";
     
     private $auth_url = "https://api.linnworks.net/";
+    
+    
     private $client;
     private $token;
     private $lui;
@@ -51,7 +53,7 @@ class Factory
         }
         
         $this->timeout = (isset($config->timeout)?$config->timeout:$this->timeout);
-    
+
         $this->dev = (isset($config->dev)?$config->dev:$this->dev);
         $this->debug = (isset($config->debug )?$config->debug :$this->debug );
     
@@ -125,7 +127,8 @@ class Factory
         $client = new \GuzzleHttp\Client([
                 'base_uri' => $this->server,
                 'timeout'  => $this->timeout,
-                'debug' => $this->debug
+                'debug' =>   $this->debug,
+                'http_errors' => false
         ]);
         
         
@@ -133,9 +136,7 @@ class Factory
                 'applicationId'=> $this->application_id,
                 'applicationSecret'=> $this->application_secret,
                 'token' => $this->secret
-        
         ));
-
         // get auth token
         $response = $client->request('POST', $this->auth_url . "api/Auth/AuthorizeByApplication", [
                 'headers'=>$this->headers,
@@ -143,8 +144,29 @@ class Factory
         ]
                 );
         
-
+        $statuscode = $response->getStatusCode();
+        
         $body = json_decode($response->getBody());
+
+        if ($statuscode!=200) {
+            
+            if (isset($body->Message)) {
+
+                $error = 'Problem connecting to linnworks server: ' . $body->Message . " (" . $statuscode . ")";
+                
+            } else {
+                
+                $error = 'Problem connecting to linnworks server: (' . $statuscode . ")";
+                
+            }
+            
+            throw new \Exception($error);
+
+        }
+        
+        if (isset($body->Server)) {
+            $this->server = $body->Server."/";
+        }
         
         $this->authorization = $body->Token;
         $this->lui = $body->UserId;
@@ -161,7 +183,9 @@ class Factory
             $this->client = new \GuzzleHttp\Client([
                     'base_uri' => $this->server,
                     'timeout'  => $this->timeout,
-                    'debug' => $this->debug
+                     'debug' => $this->debug,
+                    'http_errors' => false
+                
             ]);
             
             
@@ -179,7 +203,7 @@ class Factory
     }
     
     
-    public function sendPost ($endpoint, $data)
+    public function sendPost ($endpoint, $data,$body=false)
     {
     
     //    $this->server = "https://eu1.linnworks.net/api/";
@@ -190,7 +214,40 @@ class Factory
         ]
                 );
     
+        
+        $request = [
+            'headers'=>$this->headers,
+            'debug' => $this->debug,
+            'query'=>$data
+        ];
+        
+        if ($body) {
+            
+            $request['body'] = $body;
+        }
+        
+        $response = $this->getClient()->request('POST', $this->server.$endpoint, $request 
+        );
     
+        $statuscode = $response->getStatusCode();
+        
+        if ($statuscode!=200 && $statuscode!=404) {
+            
+            if (isset($body->Message)) {
+                
+                $error = 'Problem connecting to linnworks server: ' . $body->Message . " (" . $statuscode . ")";
+                
+            } else {
+                
+                $error = 'Problem connecting to linnworks server: (' . $statuscode . ")";
+                
+            }
+            
+            throw new \Exception($error);
+            
+        }
+        
+        
         $this->raw_result = $response->getBody();
         $this->result = json_decode($this->raw_result);
     
@@ -201,20 +258,20 @@ class Factory
     
     public function getOrder ($endpoint, $data)
     {
-
+        
         $response = $this->getClient()->request('POST', $this->server."Orders/GetOrder", [
-                'headers'=>$headers,
-                'query'=>$data
+            'headers'=>$headers,
+            'query'=>$data
         ]
-                );
-    
-    
+            );
+        
+        
         $order = json_decode($response->getBody());
-    
-    
+        
+        
         return $order;
-    
-    
+        
+        
     }
     
     public function getDb ()

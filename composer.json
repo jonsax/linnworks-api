@@ -1,17 +1,16 @@
 {
-    "name": "jonsax/linnworks-api",
-    "type": "package",
-    "license": "MIT",
-    "description": "Linnworks library",
-    "homepage": "http://www.itsax.com",
-    "require" : {
-        "php" : "^5.6 || ^7.0",
-        "guzzlehttp/guzzle": "^6.2"
-    },
-
-    "autoload": {
-        "psr-4" : {
-            "jonsax\\linnworks" : "src"
-        }
-    }
+	"name" : "jonsax/linnworks-api",
+	"type" : "package",
+	"license" : "MIT",
+	"description" : "Linnworks library",
+	"homepage" : "http://www.itsax.com",
+	"require" : {
+		"php" : "^5.6 || ^7.0",
+		"guzzlehttp/guzzle" : "^6.2"
+	},
+	"autoload" : {
+		"psr-4" : {
+			"jonsax\\linnworks" : "src"
+		}
+	}
 }
