@@ -4,6 +4,10 @@ namespace Jonsax\Linnworks;
 
 use GuzzleHttp\Client;
 use GuzzleHttp\Psr7\Request;
+use Zend\Db\TableGateway\TableGateway;
+use Zend\Db\Sql\Select;
+use Zend\Db\ResultSet\HydratingResultSet;
+use Zend\Db\TableGateway\Feature\RowGatewayFeature;
 
 class Factory
 {
@@ -23,16 +27,25 @@ class Factory
     private $lui;
 
     private $authorization;
-
-    public function __construct($config)
-    {
-        $this->application_id = $config->application_id;
-        $this->application_secret = $config->application_secret;
-
-        $this->secret = $config->secret;
+    private $db;
+    private $dbparams;
+    
+    private $linnworksproductsTable;
+    
+    private $productsTable;
+    private $logTable;
+    
+    
+    public function __construct($config) {
+    
+        $this->application_id = $config->linnworks->application_id;
+        $this->application_secret = $config->linnworks->application_secret;
+        
+        foreach ($config->linnworks as $key => $value) {
+            $this->$key = $value;
+        }
 
         $this->timeout = (isset($config->timeout) ? $config->timeout : $this->timeout);
-
         $this->dev = (isset($config->dev) ? $config->dev : $this->dev);
         $this->debug = (isset($config->debug) ? $config->debug : $this->debug);
 
@@ -45,6 +58,7 @@ class Factory
             //      'Content-Length'=>strlen($data),
             //      'content' => $data
         ];
+        $this->dbparams = $config->doctrine->connection->orm_default->params;
         
     }
 
@@ -58,49 +72,49 @@ class Factory
         $this->authorization = $authorization;
     }
 
-    public function Authorize()
+    public function Authorize ()
     {
-        $client = new \GuzzleHttp\Client([
-            'base_uri' => $this->server,
-            'timeout' => $this->timeout,
-            'debug' => $this->debug,
-            'http_errors' => false
-        ]);
+        $client = new \GuzzleHttp\Client(
+            [
+                'base_uri' => $this->server,
+                'timeout' => $this->timeout,
+                'debug' => $this->guzzle_debug
+            ]);
 
-        $data = http_build_query(array(
-            'applicationId' => $this->application_id,
-            'applicationSecret' => $this->application_secret,
-            'token' => $this->secret
-        ));
-
+        $query = array(
+                'applicationId' => $this->application_id,
+                'applicationSecret' => $this->application_secret,
+                'token' => $this->token
+        );
+        $data = http_build_query($query);
+        
         // get auth token
-        $response = $client->request('POST', $this->auth_url . "api/Auth/AuthorizeByApplication", [
+        $response = $client->request('POST',
+            $this->auth_url . "api/Auth/AuthorizeByApplication",
+            [
                 'headers' => $this->headers,
                 'query' => $data
-            ]
-        );
-
-        $statuscode = $response->getStatusCode();
+            ]);
+        
         $body = json_decode($response->getBody());
-
-        if ($statuscode != 200) {
-            if (isset($body->Message)) {
-                $error = 'Problem connecting to linnworks server: ' . $body->Message . " (" . $statuscode . ")";
-            } else {
-                $error = 'Problem connecting to linnworks server: (' . $statuscode . ")";
-            }
-            throw new \Exception($error);
-        }
-
-        if (isset($body->Server)) {
-            $this->server = $body->Server . "/";
-        }
-
+        // print_r($body);
+        
         $this->authorization = $body->Token;
         $this->lui = $body->UserId;
+        $this->server = $body->Server."/api/";
+        
+        $this->getLogTable()->insert(array(
+            "created_at"=> date("Y-m-d H:i:s"),
+            "request" => json_encode($data),
+            "response" => json_encode($body),
+            "url" => "api/Auth/AuthorizeByApplication",
+            "status" => 1
+        ));
+        
         return $body;
-
     }
+    
+
 
     public function getClient()
     {
@@ -113,10 +127,8 @@ class Factory
             ]);
 
             if (!$this->authorization) {
-
                 $this->Authorize();
             }
-
             $this->headers['Authorization'] = $this->authorization;
         }
         return $this->client;
@@ -133,7 +145,6 @@ class Factory
         ];
 
         if ($body) {
-
             $request['body'] = $body;
         }
 
@@ -145,16 +156,11 @@ class Factory
         if ($statuscode != 200 && $statuscode != 404) {
 
             if (isset($body->Message)) {
-
                 $error = 'Problem connecting to linnworks server: ' . $body->Message . " (" . $statuscode . ")";
-
             } else {
-
                 $error = 'Problem connecting to linnworks server: (' . $statuscode . ")";
-
             }
             throw new \Exception($error);
-
         }
 
         $this->raw_result = $response->getBody();
@@ -209,4 +215,54 @@ class Factory
 
     }
 
+    public function getDb ()
+    {
+        if (! $this->db) {
+            
+            $this->db = new \Zend\Db\Adapter\Adapter(
+                array(
+                    'driver' => 'pdo_mysql',
+                    'database' => $this->dbparams->dbname,
+                    'username' => $this->dbparams->user,
+                    'password' => $this->dbparams->password,
+                    'hostname' => $this->dbparams->host
+                ));
+        }
+        
+        return $this->db;
+    }
+    
+    public function getLogTable ()
+    {
+        if (! $this->logTable) {
+            $this->logTable = new TableGateway('log', $this->getDb(), null,
+                new HydratingResultSet());
+        }
+        
+        return $this->logTable;
+    }
+    
+    
+    
+    
+    public function getProductsTable ()
+    {
+        if (! $this->productsTable) {
+            $this->productsTable= new TableGateway('products', $this->getDb(),
+                null, new HydratingResultSet());
+        }
+        return $this->productsTable;
+    }
+    
+    
+    public function getLinnworksProductsTable ()
+    {
+        if (! $this->linnworksproductsTable) {
+            $this->linnworksproductsTable= new TableGateway('linnworks_products', $this->getDb(),
+                null, new HydratingResultSet());
+        }
+        
+        return $this->linnworksproductsTable;
+        
+    }
 }
